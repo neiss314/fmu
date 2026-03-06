@@ -71,10 +71,10 @@ type
     fMemory: TMemoryStream;
   begin
     Result := False;
-    zipArchive := Utf8ToAnsi(fZipFilePath);
+    zipArchive := Utf8Encode(fZipFilePath);
     // Wildcard '*' нужен для поиска файла в подпапках внутри ZIP
     // (моды Factorio хранят info.json как modname_version/info.json)
-    SearchingFile := Utf8ToAnsi('*' + fUnpackedFile);
+    SearchingFile := Utf8Encode('*' + fUnpackedFile);
     fMemorySize := 0;
     UnZipper := unzOpen(PChar(zipArchive));
     try
@@ -878,3 +878,4 @@ begin
   WriteLn('Press Enter to exit...');
   ReadLn;
 end.
+
