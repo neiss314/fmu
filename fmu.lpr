@@ -14,7 +14,7 @@ uses
 
 const
   JSONInfoFull = 'https://mods.factorio.com/api/mods/';
-  ModDownloadURL = 'https://mods-storage.re146.dev/';
+  ModDownloadURL = '';
   IgnoredMods: array[0..1] of string = ('base', 'space-age');
 
   BUFFER_SIZE = 65535;
@@ -878,4 +878,5 @@ begin
   WriteLn('Press Enter to exit...');
   ReadLn;
 end.
+
 
