@@ -66,7 +66,7 @@ type
     zfinfos: unz_file_info_ptr;
     li_SizeRead: LongInt;
     fMemorySize: LongWord;
-    FBuffer: array[0..BUFFER_SIZE - 1] of Byte;
+    FBuffer: array[0..BUFFER_SIZE] of Byte;
     zipArchive, SearchingFile: String;
     fMemory: TMemoryStream;
   begin
@@ -878,5 +878,6 @@ begin
   WriteLn('Press Enter to exit...');
   ReadLn;
 end.
+
 
 
