@@ -16,4 +16,4 @@ Requirements:
 Windows (uses WinInet for HTTP requests)
 
 Use Lazarus or the Free Pascal compiler (fpc).
-Uses Json Tools Pascal Unit: http://www.getlazarus.org/json
+Uses Json Tools Pascal Unit: https://github.com/sysrpl/JsonTools/
