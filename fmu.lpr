@@ -10,6 +10,7 @@ uses
   ziputils in 'unzip\ziputils.pp',
   Unzip32 in 'unzip\Unzip32.pp',
   jsontools in 'JSON\jsontools.pp',
+  commandline in 'CommandLine\CommandLine.pp',
   WinInet;
 
 const
@@ -23,6 +24,7 @@ const
 
 var
   GlobalInetSession: HINTERNET = nil;
+  GetStartDir: string;
 
 type
   PModInfo = ^TModInfo;
@@ -71,10 +73,10 @@ type
     fMemory: TMemoryStream;
   begin
     Result := False;
-    zipArchive := Utf8Encode(fZipFilePath);
+    zipArchive := UTF8Encode(fZipFilePath);
     // Wildcard '*' нужен для поиска файла в подпапках внутри ZIP
     // (моды Factorio хранят info.json как modname_version/info.json)
-    SearchingFile := Utf8Encode('*' + fUnpackedFile);
+    SearchingFile := UTF8Encode('*' + fUnpackedFile);
     fMemorySize := 0;
     UnZipper := unzOpen(PChar(zipArchive));
     try
@@ -458,7 +460,7 @@ type
 
   procedure DownloadMissingMod(const fModName: string; var fModInfo: TList; var fDependencies: TStringList);
   var
-    URL, LatestVer, ExpectedSHA1, DownloadedFile, GetStartDir: string;
+    URL, LatestVer, ExpectedSHA1, DownloadedFile: string;
     ComputedSHA1: string;
     mJSONStream: TMemoryStream;
     pMod: PModInfo;
@@ -467,9 +469,13 @@ type
     fDepName: string;
     IsIgnored, Found: Boolean;
   begin
+    if GetStartDir = '' then
+    begin
+      WriteLn('Error finding the mods folder');
+      exit;
+    end;
     WriteLn('Downloading missing dependency: ', fModName);
-
-    GetStartDir := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0)));
+    //GetStartDir := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0)));
     URL := JSONInfoFull + UrlEncode(fModName);
 
     mJSONStream := TMemoryStream.Create;
@@ -608,7 +614,7 @@ type
   end;
 
 var
-  GetStartDir, ZipPath, fName, fVersion, fDepName, dlURL: string;
+  ZipPath, fName, fVersion, fDepName, dlURL: string;
   DownloadedFile, CurrentFile, ComputedSHA1: string;
   InfoStream: TMemoryStream;
   JSONFile, DepNode, LastRelease: TJsonNode;
@@ -618,12 +624,45 @@ var
   pMod: PModInfo;
   i, j, k: Integer;
   IsIgnored, Found: Boolean;
-
+  Cmd: TCmdLine;
+  ver: Boolean;
 begin
+  GetStartDir := ExtractFilePath(ParamStr(0));
+  Cmd := TCmdLine.Create;
+  try
+    Cmd.AddStrKey('P', '', 'PATH');
+    Cmd.AddBoolKey('V', False, 'version');
+    //Cmd.RequirePaths(0, 1);
+    Cmd.Parse;
+    if Cmd.IsValid then
+    begin
+      // fmu.exe -p="some path"
+      GetStartDir := LowerCase(Cmd.StrKey['P']);
+      if not DirectoryExists(GetStartDir, False) then
+      begin
+        GetStartDir := ExtractFilePath(ParamStr(0));
+      end;
+      ver := Cmd.BoolKey['V'];
+    end
+    else
+    begin
+      WriteLn('Usage: ', ExtractFileName(ParamStr(0)), ' [-V] [-P="path to folder"]');
+    end;
+  finally
+    Cmd.Free;
+    GetStartDir := IncludeTrailingPathDelimiter(GetStartDir);
+  end;
   writeln();
-  Msg('F A C T O R I O   M O D   U P D A T E R', $0B);
+  if ver then
+  begin
+    Msg('F A C T O R I O   M O D   U P D A T E R   V E R S I O N   1.0.0', $0B);
+  end
+  else
+  begin
+    Msg('F A C T O R I O   M O D   U P D A T E R', $0B);
+  end;
   writeln();
-  GetStartDir := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0)));
+
   ZipPath := GetStartDir + '*.zip';
   GlobalInetSession := InternetOpen(strUserAgentDefault, INTERNET_OPEN_TYPE_PRECONFIG, nil, nil, 0);
   if GlobalInetSession = nil then
@@ -878,7 +917,3 @@ begin
   WriteLn('Press Enter to exit...');
   ReadLn;
 end.
-
-
-
-
