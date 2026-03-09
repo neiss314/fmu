@@ -54,13 +54,16 @@ type
   end;
 
   function CalculateFileSHA1(const FileName: string): string;
+  var
+    SHA1Digest: TSHA1Digest;
   begin
     Result := '';
     if FileExists(FileName) then
     begin
-      Result := SHA1Print(SHA1File(FileName, BUFFER_SIZE * 2));
+      SHA1Digest := SHA1File(FileName, BUFFER_SIZE * 2);
+      Result := SHA1Print(SHA1Digest);
     end;
-  end;
+  end;  
 
   function UnzipInStream(var fStream: TMemoryStream; const fZipFilePath, fUnpackedFile: string): Boolean;
   var
@@ -917,4 +920,5 @@ begin
   WriteLn('Press Enter to exit...');
   ReadLn;
 end.
+
 
