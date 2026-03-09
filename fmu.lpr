@@ -18,7 +18,7 @@ uses
 const
   JSONInfoFull = 'https://mods.factorio.com/api/mods/';
   // Базовые URL для получения информации о модах и скачивания файлов
-  ModDownloadURL = 'https://mods-storage.re146.dev/';
+  ModDownloadURL = '';
   // Зеркало для скачивания (добавлено в релизных exe)
   IgnoredMods: array[0..1] of string = ('base', 'space-age');
   // Список модов, которые игнорируются при обработке зависимостей (встроенные моды Factorio)
@@ -1017,4 +1017,5 @@ begin
   WriteLn('Press Enter to exit...');
   ReadLn;
 end.
+
 
