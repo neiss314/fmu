@@ -1,19 +1,19 @@
-{$MODE objfpc}// Директива: использовать Object Pascal режим компилятора Free Pascal
+{$MODE objfpc}
 
-program fmu;            // Имя программы: Factorio Mod Updater
+program fmu;
 
-{$H+}// Включить поддержку длинных строк (AnsiString)
+{$H+}
 
 uses
-  crt,                  // Работа с консолью (цвета, позиционирование)
-  Classes,              // Базовые классы (TList, TStream, TStringList и др.)
-  SysUtils,             // Системные утилиты (работа с файлами, строками, исключения)
+  crt,
+  Classes,
+  SysUtils,
   SHA1 in 'SHA1\SHA1.pp',       // Модуль для вычисления SHA1-хеша (подключаемый файл)
   ziputils in 'unzip\ziputils.pp', // Вспомогательные функции для работы с ZIP
   Unzip32 in 'unzip\Unzip32.pp',   // Основной модуль для распаковки ZIP-архивов
   jsontools in 'JSON\jsontools.pp', // Модуль для парсинга и генерации JSON
   commandline in 'CommandLine\CommandLine.pp', // Модуль для разбора параметров командной строки
-  WinInet;              // Windows Internet API для HTTP-запросов
+  WinInet;
 
 const
   JSONInfoFull = 'https://mods.factorio.com/api/mods/';
@@ -1017,3 +1017,4 @@ begin
   WriteLn('Press Enter to exit...');
   ReadLn;
 end.
+
