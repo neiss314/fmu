@@ -1,58 +1,75 @@
-{$MODE objfpc}
-program fmu;
+{$MODE objfpc}// Директива: использовать Object Pascal режим компилятора Free Pascal
 
-{$H+}
+program fmu;            // Имя программы: Factorio Mod Updater
+
+{$H+}// Включить поддержку длинных строк (AnsiString)
+
 uses
-  crt,
-  Classes,
-  SysUtils,
-  SHA1 in 'SHA1\SHA1.pp',
-  ziputils in 'unzip\ziputils.pp',
-  Unzip32 in 'unzip\Unzip32.pp',
-  jsontools in 'JSON\jsontools.pp',
-  commandline in 'CommandLine\CommandLine.pp',
-  WinInet;
+  crt,                  // Работа с консолью (цвета, позиционирование)
+  Classes,              // Базовые классы (TList, TStream, TStringList и др.)
+  SysUtils,             // Системные утилиты (работа с файлами, строками, исключения)
+  SHA1 in 'SHA1\SHA1.pp',       // Модуль для вычисления SHA1-хеша (подключаемый файл)
+  ziputils in 'unzip\ziputils.pp', // Вспомогательные функции для работы с ZIP
+  Unzip32 in 'unzip\Unzip32.pp',   // Основной модуль для распаковки ZIP-архивов
+  jsontools in 'JSON\jsontools.pp', // Модуль для парсинга и генерации JSON
+  commandline in 'CommandLine\CommandLine.pp', // Модуль для разбора параметров командной строки
+  WinInet;              // Windows Internet API для HTTP-запросов
 
 const
   JSONInfoFull = 'https://mods.factorio.com/api/mods/';
-  ModDownloadURL = ''; //Added in release executables
+  // Базовые URL для получения информации о модах и скачивания файлов
+  ModDownloadURL = 'https://mods-storage.re146.dev/';
+  // Зеркало для скачивания (добавлено в релизных exe)
   IgnoredMods: array[0..1] of string = ('base', 'space-age');
+  // Список модов, которые игнорируются при обработке зависимостей (встроенные моды Factorio)
+  // Версия программы
   VersionStr = '1.0.0';
+
+  // Размер буфера для чтения данных (используется при работе с файлами и сетью)
   BUFFER_SIZE = 65535;
+  // User-Agent для HTTP-запросов (имитация браузера)
   strUserAgentDefault = 'Mozilla/5.0 (Windows; U; MSIE 7.0; Windows NT 6.0; en-US)';
+  // Флаги для WinInet: не использовать кэш, всегда загружать заново
   dwFlags = INTERNET_FLAG_RELOAD or INTERNET_FLAG_NO_CACHE_WRITE;
 
 var
-  GlobalInetSession: HINTERNET = nil;
+  GlobalInetSession: HINTERNET = nil; // Глобальный сеанс WinInet (открывается один раз)
   GetStartDir: string;
+  // Рабочая папка, в которой ищем моды (передаётся через параметр -P)
 
 type
+  // Указатель на запись TModInfo
   PModInfo = ^TModInfo;
 
+  // Структура для хранения информации о моде
   TModInfo = record
-    ModName: string;
-    CurrentVer: string;
-    LatestVer: string;
-    ExpectedSHA1: string;
+    ModName: string;      // Имя мода
+    CurrentVer: string;   // Текущая версия (из локального ZIP)
+    LatestVer: string;    // Последняя доступная версия (из API)
+    ExpectedSHA1: string; // Ожидаемый SHA1 (из API, для проверки целостности)
   end;
 
+  // Процедура для вывода сообщения с заданным цветом текста
   procedure Msg(const s: string; attr: Word);
   var
     savedAttr: Word;
 
+  // Внутренняя процедура установки цвета текста и фона
     procedure SetTextColor(attr: Word);
     begin
-      TextColor(attr and $0F);
-      TextBackground((attr shr 4) and $07);
+      TextColor(attr and $0F);          // младшие 4 бита – цвет текста
+      TextBackground((attr shr 4) and $07); // следующие 3 бита – цвет фона
     end;
 
   begin
-    savedAttr := TextAttr;
-    SetTextColor(attr);
-    WriteLn(s);
-    TextAttr := savedAttr;
+    savedAttr := TextAttr;               // сохраняем текущие атрибуты
+    SetTextColor(attr);                  // устанавливаем нужный цвет
+    WriteLn(s);                           // выводим строку
+    TextAttr := savedAttr;                // восстанавливаем атрибуты
   end;
 
+  // Функция вычисления SHA1 для файла
+  // Возвращает строку с хешем (40 символов) или пустую строку в случае ошибки
   function CalculateFileSHA1(const FileName: string): string;
   var
     SHA1Digest: TSHA1Digest;
@@ -60,66 +77,75 @@ type
     Result := '';
     if FileExists(FileName) then
     begin
-      SHA1Digest := SHA1File(FileName, BUFFER_SIZE * 2);
-      Result := SHA1Print(SHA1Digest);
+      SHA1Digest := SHA1File(FileName, BUFFER_SIZE * 2); // читаем файл блоками по 128K
+      Result := SHA1Print(SHA1Digest);                   // преобразуем в шестнадцатеричную строку
     end;
-  end;  
+  end;
 
+  // Функция извлечения файла из ZIP-архива в поток памяти
+  // Параметры:
+  //   fStream - поток, в который будет помещено содержимое файла
+  //   fZipFilePath - путь к ZIP-архиву
+  //   fUnpackedFile - имя файла внутри архива (можно использовать '*' для поиска в подпапках)
+  // Возвращает True при успешном извлечении, иначе False
   function UnzipInStream(var fStream: TMemoryStream; const fZipFilePath, fUnpackedFile: string): Boolean;
   var
-    UnZipper: unzFile;
-    zfinfos: unz_file_info_ptr;
-    li_SizeRead: LongInt;
-    fMemorySize: LongWord;
-    FBuffer: array[0..BUFFER_SIZE - 1] of Byte;
-    zipArchive, SearchingFile: String;
-    fMemory: TMemoryStream;
+    UnZipper: unzFile;               // дескриптор открытого ZIP-архива
+    zfinfos: unz_file_info_ptr;       // указатель на информацию о файле в архиве
+    li_SizeRead: LongInt;             // количество прочитанных байт за один раз
+    fMemorySize: LongWord;             // общий размер извлечённого файла
+    FBuffer: array[0..BUFFER_SIZE - 1] of Byte; // буфер для чтения
+    zipArchive, SearchingFile: String; // имена в ANSI-кодировке для unzOpen
+    fMemory: TMemoryStream;            // временный поток для накопления данных
   begin
     Result := False;
+    // Преобразуем имена в ANSI (требуется библиотекой unzip)
     zipArchive := UTF8Encode(fZipFilePath);
-    // Wildcard '*' нужен для поиска файла в подпапках внутри ZIP
-    // (моды Factorio хранят info.json как modname_version/info.json)
+    // Добавляем '*' в начале, чтобы найти файл в любой подпапке (структура Factorio: modname_version/info.json)
     SearchingFile := UTF8Encode('*' + fUnpackedFile);
     fMemorySize := 0;
-    UnZipper := unzOpen(PChar(zipArchive));
+    UnZipper := unzOpen(PChar(zipArchive)); // открываем архив
     try
+      // Ищем нужный файл внутри архива (по маске)
       if unzLocateFile(UnZipper, PAnsiChar(SearchingFile)) = UNZ_OK then
       begin
-        unzOpenCurrentFile(UnZipper);
-        New(zfinfos);
+        unzOpenCurrentFile(UnZipper);          // открываем текущий файл для чтения
+        New(zfinfos);                            // выделяем память под информацию о файле
         try
+          // Получаем информацию о файле (не используется, но требуется для корректной работы)
           unzGetCurrentFileInfo(UnZipper, zfinfos, PAnsiChar(SearchingFile), SizeOf(SearchingFile), nil, 0, nil, 0);
           fMemory := TMemoryStream.Create;
           try
-            // Читаем чанками; li_SizeRead <= 0 означает конец файла или ошибку
+            // Читаем данные из архива блоками, пока не достигнем конца
             repeat
               li_SizeRead := unzReadCurrentFile(UnZipper, @FBuffer[0], SizeOf(FBuffer));
               if li_SizeRead <= 0 then
               begin
                 Break;
-              end;
-              fMemory.WriteBuffer(FBuffer[0], li_SizeRead);
+              end;                          // конец файла или ошибка
+              fMemory.WriteBuffer(FBuffer[0], li_SizeRead); // пишем во временный поток
               Inc(fMemorySize, li_SizeRead);
             until False;
             fMemory.Position := 0;
             if fMemorySize > 0 then
             begin
-              fStream.CopyFrom(fMemory, fMemorySize);
+              fStream.CopyFrom(fMemory, fMemorySize); // копируем в итоговый поток
               Result := True;
             end;
           finally
             fMemory.Free;
           end;
         finally
-          Dispose(zfinfos);
+          Dispose(zfinfos); // освобождаем память
         end;
       end;
     finally
-      unzCloseCurrentFile(UnZipper);
-      unzClose(UnZipper);
+      unzCloseCurrentFile(UnZipper); // закрываем текущий файл
+      unzClose(UnZipper);             // закрываем архив
     end;
   end;
 
+  // Проверяет, является ли файл корректным ZIP-архивом (проверка сигнатуры PK в начале)
   function IsValidZipFile(const fFileName: string): Boolean;
   var
     FS: TFileStream;
@@ -136,16 +162,17 @@ type
         if FS.Size >= 2 then
         begin
           FS.Read(Sig[0], 2);
-          Result := (Sig[0] = $50) and (Sig[1] = $4B);
+          Result := (Sig[0] = $50) and (Sig[1] = $4B); // первые два байта = 'P','K'
         end;
       finally
         FS.Free;
       end;
     except
-      Result := False;
+      Result := False; // при ошибке считаем файл невалидным
     end;
   end;
 
+  // URL-кодирование строки (замена небезопасных символов на %XX)
   function UrlEncode(const s: string): string;
   const
     SafeChars = ['A'..'Z', 'a'..'z', '0'..'9', '-', '_', '.', '~'];
@@ -172,6 +199,8 @@ type
     end;
   end;
 
+  // Загружает данные из URL в поток (без сохранения в файл)
+  // Возвращает True при успешной загрузке (размер > 0)
   function DownloadToStream(const fURL: string; fDLStream: TStream): Boolean;
   var
     hSession, hFile: HINTERNET;
@@ -185,12 +214,13 @@ type
     Result := False;
     fDLStream.Size := 0;
     fDLStream.Position := 0;
-    hSession := GlobalInetSession;
+    hSession := GlobalInetSession; // используем глобальную сессию
     if hSession = nil then
     begin
       WriteLn('Failed to initialize internet connection');
       Exit;
     end;
+    // Открываем URL
     hFile := InternetOpenUrl(hSession, PChar(fURL), nil, 0, dwFlags, 0);
     if hFile = nil then
     begin
@@ -198,17 +228,20 @@ type
       Exit;
     end;
     try
+      // Получаем HTTP-статус ответа
       StatusSize := SizeOf(StatusCode);
       if not HttpQueryInfo(hFile, HTTP_QUERY_STATUS_CODE or HTTP_QUERY_FLAG_NUMBER, @StatusCode, StatusSize, Index) then
       begin
         WriteLn('Failed to query HTTP status');
         Exit;
       end;
+      // Проверяем, что статус успешный (2xx)
       if (StatusCode < 200) or (StatusCode >= 300) then
       begin
         WriteLn('HTTP error: ', StatusCode);
         Exit;
       end;
+      // Читаем данные блоками
       while True do
       begin
         if not InternetReadFile(hFile, @Buffer, SizeOf(Buffer), BytesRead) then
@@ -219,10 +252,11 @@ type
         if BytesRead = 0 then
         begin
           Break;
-        end;
+        end; // конец данных
         fDLStream.WriteBuffer(Buffer, BytesRead);
         Inc(DownloadedSize, BytesRead);
       end;
+      // Если что-то скачали – успех
       if DownloadedSize > 0 then
       begin
         fDLStream.Position := 0;
@@ -238,6 +272,8 @@ type
     end;
   end;
 
+  // Загружает файл из URL и сохраняет на диск, отображает прогресс.
+  // Возвращает SHA1 скачанного файла или пустую строку при ошибке.
   function DownloadFile(const fURL, fSaveToFileName: string): string;
   var
     hSession, hFile: HINTERNET;
@@ -248,7 +284,7 @@ type
     StatusCode: DWORD;
     StatusSize: DWORD;
     Index: DWORD = 0;
-    ContentLength: Int64 = 0;
+    ContentLength: Int64 = 0;          // полный размер файла (если известен)
     ContentLengthDW: DWORD = 0;
     ContentSize: DWORD = 0;
   begin
@@ -269,6 +305,7 @@ type
         Exit;
       end;
 
+      // Получаем статус ответа
       StatusSize := SizeOf(StatusCode);
       if not HttpQueryInfo(hFile, HTTP_QUERY_STATUS_CODE or HTTP_QUERY_FLAG_NUMBER, @StatusCode, StatusSize, Index) then
       begin
@@ -282,6 +319,7 @@ type
         Exit;
       end;
 
+      // Пытаемся узнать размер файла из заголовка Content-Length
       ContentSize := SizeOf(ContentLengthDW);
       if HttpQueryInfo(hFile, HTTP_QUERY_CONTENT_LENGTH or HTTP_QUERY_FLAG_NUMBER, @ContentLengthDW, ContentSize, Index) then
       begin
@@ -290,9 +328,11 @@ type
       else
       begin
         ContentLength := -1;
-      end;
+      end; // размер неизвестен
 
+      // Создаём файл для записи
       FS := TFileStream.Create(fSaveToFileName, fmCreate);
+      // Читаем данные и отображаем прогресс
       while True do
       begin
         if not InternetReadFile(hFile, @Buffer, SizeOf(Buffer), BytesRead) then
@@ -306,26 +346,23 @@ type
         end;
         FS.WriteBuffer(Buffer, BytesRead);
         Inc(DownloadedSize, BytesRead);
-        //SetTextColor($0B);
+
+        // Вывод прогресса в консоль (одна строка обновляется)
         if ContentLength > 0 then
         begin
-          // Размер известен — показываем прогресс в %
-          if ContentLength < 1024 * 1024 then
+          if ContentLength < 1024 * 1024 then // размер в килобайтах
           begin
-            Write(#13, '  Downloaded: ', DownloadedSize div 1024, ' KB / ',
-              ContentLength div 1024, ' KB (',
+            Write(#13, '  Downloaded: ', DownloadedSize div 1024, ' KB / ', ContentLength div 1024, ' KB (',
               (DownloadedSize * 100) div ContentLength, '%)');
           end
-          else
+          else // размер в мегабайтах
           begin
-            Write(#13, '  Downloaded: ', DownloadedSize div (1024 * 1024), ' MB / ',
-              ContentLength div (1024 * 1024), ' MB (',
-              (DownloadedSize * 100) div ContentLength, '%)');
+            Write(#13, '  Downloaded: ', DownloadedSize div (1024 * 1024), ' MB / ', ContentLength div (1024 * 1024),
+              ' MB (', (DownloadedSize * 100) div ContentLength, '%)');
           end;
         end
         else
         begin
-          // Размер неизвестен — показываем просто сколько скачано
           if DownloadedSize < 1024 * 1024 then
           begin
             Write(#13, '  Downloaded: ', DownloadedSize div 1024, ' KB');
@@ -336,8 +373,7 @@ type
           end;
         end;
       end;
-      //SetTextColor(GetAttr);
-      WriteLn;
+      WriteLn; // переход на новую строку после завершения прогресса
     finally
       if hFile <> nil then
       begin
@@ -346,6 +382,7 @@ type
       FreeAndNil(FS);
     end;
 
+    // Проверяем результат скачивания
     if DownloadedSize > 0 then
     begin
       if IsValidZipFile(fSaveToFileName) then
@@ -366,7 +403,7 @@ type
     end
     else
     begin
-      Msg('  Download failed', $0C);
+      Msg('  Download failed', $0C); // красный цвет
       if FileExists(fSaveToFileName) then
       begin
         DeleteFile(fSaveToFileName);
@@ -374,6 +411,8 @@ type
     end;
   end;
 
+  // Извлекает имя мода из строки зависимости (пример: "? base >= 1.0" -> "base")
+  // Удаляет кавычки, игнорирует необязательные/противоречивые префиксы, отсекает операторы сравнения.
   function ExtractModNameFromDependency(const fDepStr: String): String;
   var
     s: string = '';
@@ -385,6 +424,7 @@ type
     Operators: array[0..5] of String = ('>=', '>', '<=', '<', '=', '~');
   begin
     Result := '';
+    // Удаляем двойные кавычки (если есть)
     for PrefixChar in fDepStr do
     begin
       if PrefixChar <> '"' then
@@ -397,6 +437,8 @@ type
     begin
       Exit;
     end;
+
+    // Пропускаем начальные пробелы (уже Trim сделал, но оставим для совместимости)
     FirstNonSpace := 1;
     while (FirstNonSpace <= Length(s)) and (s[FirstNonSpace] = ' ') do
     begin
@@ -406,11 +448,15 @@ type
     begin
       Exit;
     end;
+
+    // Проверяем первый значимый символ на наличие специальных префиксов: ? ! ~ ( — такие зависимости игнорируем
     PrefixChar := s[FirstNonSpace];
     if PrefixChar in ['?', '!', '~', '('] then
     begin
       Exit;
     end;
+
+    // Обработка скобок в начале: "(something) modname"
     if (Length(s) >= 3) and (s[FirstNonSpace] = '(') then
     begin
       p := Pos(') ', s);
@@ -436,6 +482,8 @@ type
         Exit;
       end;
     end;
+
+    // Ищем позицию первого оператора сравнения (>=, >, <=, <, =, ~)
     FoundOpPos := Length(s) + 1;
     for i := 0 to 5 do
     begin
@@ -445,15 +493,20 @@ type
         FoundOpPos := opPos;
       end;
     end;
+
+    // Если нашли оператор, отсекаем всё после него
     if FoundOpPos <= Length(s) then
     begin
       s := Trim(Copy(s, 1, FoundOpPos - 1));
     end;
+
+    // Отсекаем пробел и последующую часть (если оператор не найден, но есть пробел)
     p := Pos(' ', s);
     if p > 0 then
     begin
       s := Trim(Copy(s, 1, p - 1));
     end;
+
     s := Trim(s);
     if s <> '' then
     begin
@@ -461,6 +514,8 @@ type
     end;
   end;
 
+  // Процедура загрузки недостающего мода (зависимости) и добавления его в список.
+  // Рекурсивно добавляет собственные зависимости этого мода в список fDependencies.
   procedure DownloadMissingMod(const fModName: string; var fModInfo: TList; var fDependencies: TStringList);
   var
     URL, LatestVer, ExpectedSHA1, DownloadedFile: string;
@@ -478,11 +533,11 @@ type
       exit;
     end;
     WriteLn('Downloading missing dependency: ', fModName);
-    //GetStartDir := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0)));
     URL := JSONInfoFull + UrlEncode(fModName);
 
     mJSONStream := TMemoryStream.Create;
     try
+      // Получаем JSON с информацией о моде
       if not DownloadToStream(URL, mJSONStream) then
       begin
         WriteLn('  Failed to fetch mod information');
@@ -493,6 +548,7 @@ type
       JSONFile := TJsonNode.Create;
       try
         JSONFile.LoadFromStream(mJSONStream);
+        // Ищем массив "releases"
         ReleasesNode := JSONFile.Find('releases');
         if (ReleasesNode = nil) or (ReleasesNode.Kind <> nkArray) or (ReleasesNode.Count = 0) then
         begin
@@ -500,6 +556,7 @@ type
           Exit;
         end;
 
+        // Берём последний релиз (самый новый)
         LastRelease := ReleasesNode.Child(ReleasesNode.Count - 1);
         if (LastRelease.Find('version') = nil) or (LastRelease.Find('sha1') = nil) then
         begin
@@ -514,7 +571,10 @@ type
           Exit;
         end;
         WriteLn('  Latest version: ', LatestVer);
+
+        // Имя файла для сохранения
         DownloadedFile := GetStartDir + fModName + '_' + LatestVer + '.zip';
+        // Скачиваем сам мод
         ComputedSHA1 := DownloadFile(ModDownloadURL + UrlEncode(fModName) + '/' + LatestVer + '.zip', DownloadedFile);
 
         if ComputedSHA1 = '' then
@@ -523,18 +583,20 @@ type
           Exit;
         end;
 
+        // Проверяем SHA1, если он предоставлен API
         if (ExpectedSHA1 <> '') and (ComputedSHA1 <> ExpectedSHA1) then
         begin
           WriteLn('  SHA1 mismatch');
           DeleteFile(DownloadedFile);
           Exit;
         end;
-        Msg('  Successfully downloaded and verified', $0A);
+        Msg('  Successfully downloaded and verified', $0A); // зелёный цвет
 
       finally
         JSONFile.Free;
       end;
 
+      // Создаём запись о моде и добавляем в общий список
       New(pMod);
       pMod^.ModName := fModName;
       pMod^.CurrentVer := LatestVer;
@@ -542,6 +604,7 @@ type
       pMod^.ExpectedSHA1 := ExpectedSHA1;
       fModInfo.Add(pMod);
 
+      // Теперь извлекаем info.json из скачанного архива, чтобы найти его зависимости
       mJSONStream.Clear;
       mJSONStream.Position := 0;
       mJSONStream.Size := 0;
@@ -553,7 +616,6 @@ type
         try
           JSONFile.LoadFromStream(mJSONStream);
           DepNode := JSONFile.Find('dependencies');
-
           if (DepNode <> nil) and (DepNode.Kind = nkArray) then
           begin
             for i := 0 to DepNode.Count - 1 do
@@ -569,6 +631,8 @@ type
               begin
                 Continue;
               end;
+
+              // Проверяем, не игнорируется ли мод
               IsIgnored := False;
               for j := Low(IgnoredMods) to High(IgnoredMods) do
               begin
@@ -582,6 +646,8 @@ type
               begin
                 Continue;
               end;
+
+              // Проверяем, не установлен ли уже этот мод
               Found := False;
               for j := 0 to fModInfo.Count - 1 do
               begin
@@ -592,11 +658,13 @@ type
                 end;
               end;
 
+              // Если уже есть в основном списке или уже в списке зависимостей – пропускаем
               if Found or (fDependencies.IndexOf(fDepName) >= 0) then
               begin
                 Continue;
               end;
 
+              // Добавляем новую зависимость в очередь на скачивание
               fDependencies.Add(fDepName);
               WriteLn('  Added dependency: ', fDepName);
             end;
@@ -628,23 +696,26 @@ var
   i, j, k: Integer;
   IsIgnored, Found: Boolean;
   Cmd: TCmdLine;
-  ShowVer: Boolean;
+  ShowVer: Boolean; // флаг вывода версии
+
 begin
-  GetStartDir := ExtractFilePath(ParamStr(0));
+  // --- Начало программы: разбор параметров командной строки ---
+  GetStartDir := ExtractFilePath(ParamStr(0)); // по умолчанию папка с exe
   Cmd := TCmdLine.Create;
   try
-    Cmd.AddStrKey('P', '', 'PATH');
-    Cmd.AddBoolKey('V', False, 'version');
+    Cmd.AddStrKey('P', '', 'PATH');        // ключ -P для указания папки с модами
+    Cmd.AddBoolKey('V', False, 'version'); // ключ -V для вывода версии
     //Cmd.RequirePaths(0, 1);
     Cmd.Parse;
+     // fmu.exe -p="some path"
     if Cmd.IsValid then
     begin
-      // fmu.exe -p="some path"
+      // Если параметр -P указан, пытаемся использовать его
       GetStartDir := LowerCase(Cmd.StrKey['P']);
       if not DirectoryExists(GetStartDir, False) then
       begin
         GetStartDir := ExtractFilePath(ParamStr(0));
-      end;
+      end; // если папка не существует, возвращаемся к папке exe
       ShowVer := Cmd.BoolKey['V'];
     end
     else
@@ -653,12 +724,13 @@ begin
     end;
   finally
     Cmd.Free;
-    GetStartDir := IncludeTrailingPathDelimiter(GetStartDir);
+    GetStartDir := IncludeTrailingPathDelimiter(GetStartDir); // добавляем разделитель в конец пути
   end;
+
   writeln();
   if ShowVer then
   begin
-    Msg('F A C T O R I O   M O D   U P D A T E R   V E R S I O N   ' + VersionStr, $0B);
+    Msg('F A C T O R I O   M O D   U P D A T E R   V E R S I O N   ' + VersionStr, $0B);  // голубой
   end
   else
   begin
@@ -667,6 +739,7 @@ begin
   writeln();
 
   ZipPath := GetStartDir + '*.zip';
+  // --- Инициализация WinInet ---
   GlobalInetSession := InternetOpen(strUserAgentDefault, INTERNET_OPEN_TYPE_PRECONFIG, nil, nil, 0);
   if GlobalInetSession = nil then
   begin
@@ -675,12 +748,15 @@ begin
     ReadLn;
     Exit;
   end;
-  ModInfo := TList.Create;
-  ModList := TStringList.Create;
-  AllDependencies := TStringList.Create;
 
-  InfoStream := TMemoryStream.Create;
+  // --- Создание списков ---
+  ModInfo := TList.Create;          // список всех обработанных модов (PModInfo)
+  ModList := TStringList.Create;    // список имён ZIP-файлов
+  AllDependencies := TStringList.Create; // список имён недостающих зависимостей
+
+  InfoStream := TMemoryStream.Create; // поток для временного хранения info.json и JSON-ответов
   try
+    // --- Шаг 1: Поиск всех ZIP-файлов в рабочей папке ---
     if FindFirst(ZipPath, faAnyFile, sr) = 0 then
     begin
       repeat
@@ -688,6 +764,8 @@ begin
       until FindNext(sr) <> 0;
       FindClose(sr);
     end;
+
+    // --- Шаг 2: Обработка каждого найденного ZIP-файла ---
     for i := 0 to ModList.Count - 1 do
     begin
       InfoStream.Clear;
@@ -696,14 +774,15 @@ begin
 
       if IsValidZipFile(GetStartDir + ModList[i]) then
       begin
+        // Пытаемся извлечь info.json
         if UnzipInStream(InfoStream, GetStartDir + ModList[i], 'info.json') then
         begin
           InfoStream.Position := 0;
           JSONFile := TJsonNode.Create;
           try
             JSONFile.LoadFromStream(InfoStream);
-            fName := JSONFile.Force('name').AsString;
-            fVersion := JSONFile.Force('version').AsString;
+            fName := JSONFile.Force('name').AsString;       // имя мода
+            fVersion := JSONFile.Force('version').AsString; // версия из локального файла
             New(pMod);
             pMod^.ModName := fName;
             pMod^.CurrentVer := fVersion;
@@ -711,6 +790,7 @@ begin
             pMod^.ExpectedSHA1 := '';
             ModInfo.Add(pMod);
 
+            // Обрабатываем зависимости из info.json
             DepNode := JSONFile.Find('dependencies');
             if DepNode <> nil then
             begin
@@ -722,11 +802,12 @@ begin
                   Continue;
                 end;
                 fDepName := ExtractModNameFromDependency(fDepName);
-
                 if fDepName = '' then
                 begin
                   Continue;
                 end;
+
+                // Проверка на игнорируемые моды
                 IsIgnored := False;
                 for k := Low(IgnoredMods) to High(IgnoredMods) do
                 begin
@@ -741,7 +822,7 @@ begin
                   if AllDependencies.IndexOf(fDepName) = -1 then
                   begin
                     AllDependencies.Add(fDepName);
-                  end;
+                  end; // добавляем в общий список, если ещё нет
                 end;
               end;
             end;
@@ -755,23 +836,28 @@ begin
         end;
       end;
     end;
+
+    // Если не найдено ни одного мода – завершаем
     if ModInfo.Count > 0 then
     begin
       Msg('Checking for updates...', $0E);
-    end
+    end // жёлтый
     else
     begin
-      Msg('Nothing found... Skipping', $0C);
+      Msg('Nothing found... Skipping', $0C); // красный
       WriteLn('Press Enter to exit...');
       ReadLn;
       Exit;
     end;
     WriteLn();
+
+    // --- Шаг 3: Проверка обновлений для каждого установленного мода ---
     for i := 0 to ModInfo.Count - 1 do
     begin
       pMod := PModInfo(ModInfo[i]);
-      //WriteLn('Processing mod: ', pMod^.ModName, ' (current version: ', pMod^.CurrentVer, ')');
-      Msg(pMod^.ModName + ' (current version: ' + pMod^.CurrentVer + ')', $0F);
+      Msg(pMod^.ModName + ' (current version: ' + pMod^.CurrentVer + ')', $0F); // белый
+
+      // Запрашиваем информацию о моде с сервера
       InfoStream.Clear;
       InfoStream.Position := 0;
       InfoStream.Size := 0;
@@ -786,6 +872,7 @@ begin
             WriteLn('  Failed to parse mod information');
             Continue;
           end;
+          // Ищем массив releases и берём последний куст
           DepNode := JSONFile.Find('releases');
           if (DepNode <> nil) and (DepNode.Kind = nkArray) and (DepNode.Count > 0) then
           begin
@@ -808,9 +895,11 @@ begin
           WriteLn('  Latest version: ', pMod^.LatestVer);
           if pMod^.CurrentVer <> pMod^.LatestVer then
           begin
-            Msg('  Update available', $0E);
+            Msg('  Update available', $0E); // жёлтый
             CurrentFile := GetStartDir + pMod^.ModName + '_' + pMod^.CurrentVer + '.zip';
             DownloadedFile := GetStartDir + pMod^.ModName + '_' + pMod^.LatestVer + '.zip';
+
+            // Скачиваем новую версию
             ComputedSHA1 := DownloadFile(ModDownloadURL + UrlEncode(pMod^.ModName) + '/' + pMod^.LatestVer + '.zip', DownloadedFile);
 
             if ComputedSHA1 <> '' then
@@ -819,15 +908,15 @@ begin
               begin
                 if ComputedSHA1 = pMod^.ExpectedSHA1 then
                 begin
-                  Msg('  SHA1 check passed', $0A);
-                  DeleteFile(CurrentFile);
+                  Msg('  SHA1 check passed', $0A); // зелёный
+                  DeleteFile(CurrentFile); // удаляем старый файл
                 end
                 else
                 begin
-                  Msg('  SHA1 mismatch!', $0C);
+                  Msg('  SHA1 mismatch!', $0C); // красный
                   WriteLn('    Expected: ', pMod^.ExpectedSHA1);
                   WriteLn('    Got:      ', ComputedSHA1);
-                  DeleteFile(DownloadedFile);
+                  DeleteFile(DownloadedFile); // удаляем битый файл
                 end;
               end
               else
@@ -846,18 +935,20 @@ begin
           end
           else
           begin
-            Msg('  Already up to date', $0A);
+            Msg('  Already up to date', $0A); // зелёный
           end;
         end;
       end
       else
       begin
-        Msg('Failed to fetch: ' + pMod^.ModName + '. Skipping.', $08);
+        Msg('Failed to fetch: ' + pMod^.ModName + '. Skipping.', $08);  // тёмно-серый
       end;
     end;
 
+    // --- Шаг 4: Обработка недостающих зависимостей (рекурсивно) ---
     if Assigned(AllDependencies) and (AllDependencies.Count > 0) then
     begin
+      // Очистка списка: удаляем пустые строки, дубликаты
       for i := AllDependencies.Count - 1 downto 0 do
       begin
         AllDependencies[i] := Trim(AllDependencies[i]);
@@ -874,6 +965,8 @@ begin
           AllDependencies.Delete(i);
         end;
       end;
+
+      // Удаляем те зависимости, которые уже есть в ModInfo (уже установлены)
       for i := AllDependencies.Count - 1 downto 0 do
       begin
         fDepName := AllDependencies[i];
@@ -892,6 +985,7 @@ begin
         end;
       end;
 
+      // Рекурсивно скачиваем оставшиеся зависимости
       while AllDependencies.Count > 0 do
       begin
         fDepName := AllDependencies[0];
@@ -899,7 +993,9 @@ begin
         DownloadMissingMod(fDepName, ModInfo, AllDependencies);
       end;
     end;
+
   finally
+    // Освобождение памяти
     for i := 0 to ModInfo.Count - 1 do
     begin
       Dispose(PModInfo(ModInfo[i]));
@@ -910,16 +1006,14 @@ begin
     InfoStream.Free;
   end;
 
+  // Закрываем сессию WinInet
   if GlobalInetSession <> nil then
   begin
     InternetCloseHandle(GlobalInetSession);
   end;
 
   WriteLn('');
-  Msg('All done.', $0A);
+  Msg('All done.', $0A); // зелёный
   WriteLn('Press Enter to exit...');
   ReadLn;
 end.
-
-
-
