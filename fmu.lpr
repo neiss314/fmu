@@ -17,7 +17,7 @@ const
   JSONInfoFull = 'https://mods.factorio.com/api/mods/';
   ModDownloadURL = ''; //Added in release executables
   IgnoredMods: array[0..1] of string = ('base', 'space-age');
-
+  VersionStr = '1.0.0';
   BUFFER_SIZE = 65535;
   strUserAgentDefault = 'Mozilla/5.0 (Windows; U; MSIE 7.0; Windows NT 6.0; en-US)';
   dwFlags = INTERNET_FLAG_RELOAD or INTERNET_FLAG_NO_CACHE_WRITE;
@@ -628,7 +628,7 @@ var
   i, j, k: Integer;
   IsIgnored, Found: Boolean;
   Cmd: TCmdLine;
-  ver: Boolean;
+  ShowVer: Boolean;
 begin
   GetStartDir := ExtractFilePath(ParamStr(0));
   Cmd := TCmdLine.Create;
@@ -645,7 +645,7 @@ begin
       begin
         GetStartDir := ExtractFilePath(ParamStr(0));
       end;
-      ver := Cmd.BoolKey['V'];
+      ShowVer := Cmd.BoolKey['V'];
     end
     else
     begin
@@ -656,9 +656,9 @@ begin
     GetStartDir := IncludeTrailingPathDelimiter(GetStartDir);
   end;
   writeln();
-  if ver then
+  if ShowVer then
   begin
-    Msg('F A C T O R I O   M O D   U P D A T E R   V E R S I O N   1.0.0', $0B);
+    Msg('F A C T O R I O   M O D   U P D A T E R   V E R S I O N   ' + VersionStr, $0B);
   end
   else
   begin
@@ -920,5 +920,6 @@ begin
   WriteLn('Press Enter to exit...');
   ReadLn;
 end.
+
 
 
