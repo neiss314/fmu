@@ -16,26 +16,18 @@ uses
   WinInet;
 
 const
-  JSONInfoFull = 'https://mods.factorio.com/api/mods/';
-  // Базовые URL для получения информации о модах и скачивания файлов
-  ModDownloadURL = '';
-  // Зеркало для скачивания (добавлено в релизных exe)
-  IgnoredMods: array[0..1] of string = ('base', 'space-age');
-  // Список модов, которые игнорируются при обработке зависимостей (встроенные моды Factorio)
-  // Версия программы
-  Version = '1.0.1';
+  JSONInfoFull = 'https://mods.factorio.com/api/mods/';  // Базовые URL для получения информации о модах и скачивания файлов
+  ModDownloadURL = '';  // Зеркало для скачивания (добавлено в релизных exe)
+  IgnoredMods: array[0..1] of string = ('base', 'space-age');  // Список модов, которые игнорируются при обработке зависимостей (встроенные моды Factorio)
+  Version = '1.0.1';  // Версия программы
 
-  // Размер буфера для чтения данных (используется при работе с файлами и сетью)
-  BUFFER_SIZE = 65535;
-  // User-Agent для HTTP-запросов (имитация браузера)
-  strUserAgentDefault = 'Mozilla/5.0 (Windows; U; MSIE 7.0; Windows NT 6.0; en-US)';
-  // Флаги для WinInet: не использовать кэш, всегда загружать заново
-  dwFlags = INTERNET_FLAG_RELOAD or INTERNET_FLAG_NO_CACHE_WRITE;
+  BUFFER_SIZE = 65535;  // Размер буфера для чтения данных (используется при работе с файлами и сетью)
+  strUserAgentDefault = 'Mozilla/5.0 (Windows; U; MSIE 7.0; Windows NT 6.0; en-US)';  // User-Agent для HTTP-запросов (имитация браузера)
+  dwFlags = INTERNET_FLAG_RELOAD or INTERNET_FLAG_NO_CACHE_WRITE;  // Флаги для WinInet: не использовать кэш, всегда загружать заново
 
 var
   GlobalInetSession: HINTERNET = nil; // Глобальный сеанс WinInet (открывается один раз)
-  GetStartDir: string;
-  // Рабочая папка, в которой ищем моды (передаётся через параметр -P)
+  GetStartDir: string;  // Рабочая папка, в которой ищем моды (передаётся через параметр -P)
 
 type
   // Указатель на запись TModInfo
@@ -687,7 +679,7 @@ type
 var
   ZipPath, fName, fVersion, fDepName, dlURL: string;
   DownloadedFile, CurrentFile, ComputedSHA1: string;
-  GetExeName: string; 
+  GetExeName: string;
   InfoStream: TMemoryStream;
   JSONFile, DepNode, LastRelease: TJsonNode;
   AllDependencies, ModList: TStringList;
@@ -697,7 +689,8 @@ var
   i, j, k: Integer;
   IsIgnored, Found: Boolean;
   Cmd: TCmdLine;
-  ShowVersion, ShowHelp, IncludeRecommended: Boolean;   // флаг вывода версии, помощи, скачивания рекомендованных модов
+  ShowVersion, ShowHelp, IncludeRecommended: Boolean;
+  // флаг вывода версии, помощи, скачивания рекомендованных модов
 
 begin
   GetStartDir := ExtractFilePath(ParamStr(0)); // по умолчанию папка с exe
@@ -708,10 +701,10 @@ begin
     Cmd.AddStrKey('P', '', 'PATH');        // ключ -P для указания папки с модами
     Cmd.AddBoolKey('V', False, 'version'); // ключ -V для вывода версии
     Cmd.AddBoolKey('R', False, 'RECOMMEND');
-    Cmd.AddBoolKey('H', False, 'HELP'); 
+    Cmd.AddBoolKey('H', False, 'HELP');
     //Cmd.RequirePaths(0, 1);
     Cmd.Parse;
-     // fmu.exe -p="some path"
+    // fmu.exe -p="some path"
     if Cmd.IsValid then
     begin
       // Если параметр -P указан, пытаемся использовать его
@@ -756,7 +749,7 @@ begin
     ReadLn;
     Exit;
   end;
-  if ShowVersion then 
+  if ShowVersion then
   begin
     Msg('F A C T O R I O   M O D   U P D A T E R   V E R S I O N   ' + Version, $0B);  // голубой
   end
@@ -846,7 +839,7 @@ begin
                 if fDepName = '' then
                 begin
                   Continue;
-                end; 
+                end;
 
                 // Проверка на игнорируемые моды
                 IsIgnored := False;
@@ -1058,5 +1051,3 @@ begin
   WriteLn('Press Enter to exit...');
   ReadLn;
 end.
-
-
