@@ -23,7 +23,7 @@ const
   IgnoredMods: array[0..1] of string = ('base', 'space-age');
   // Список модов, которые игнорируются при обработке зависимостей (встроенные моды Factorio)
   // Версия программы
-  VersionStr = '1.0.0';
+  Version = '1.0.1';
 
   // Размер буфера для чтения данных (используется при работе с файлами и сетью)
   BUFFER_SIZE = 65535;
@@ -687,6 +687,7 @@ type
 var
   ZipPath, fName, fVersion, fDepName, dlURL: string;
   DownloadedFile, CurrentFile, ComputedSHA1: string;
+  GetExeName: string; 
   InfoStream: TMemoryStream;
   JSONFile, DepNode, LastRelease: TJsonNode;
   AllDependencies, ModList: TStringList;
@@ -696,15 +697,18 @@ var
   i, j, k: Integer;
   IsIgnored, Found: Boolean;
   Cmd: TCmdLine;
-  ShowVer: Boolean; // флаг вывода версии
+  ShowVersion, ShowHelp, IncludeRecommended: Boolean;   // флаг вывода версии, помощи, скачивания рекомендованных модов
 
 begin
-  // --- Начало программы: разбор параметров командной строки ---
   GetStartDir := ExtractFilePath(ParamStr(0)); // по умолчанию папка с exe
+  GetExeName := ExtractFileName(ParamStr(0));
+  // --- Начало программы: разбор параметров командной строки ---
   Cmd := TCmdLine.Create;
   try
     Cmd.AddStrKey('P', '', 'PATH');        // ключ -P для указания папки с модами
     Cmd.AddBoolKey('V', False, 'version'); // ключ -V для вывода версии
+    Cmd.AddBoolKey('R', False, 'RECOMMEND');
+    Cmd.AddBoolKey('H', False, 'HELP'); 
     //Cmd.RequirePaths(0, 1);
     Cmd.Parse;
      // fmu.exe -p="some path"
@@ -716,21 +720,45 @@ begin
       begin
         GetStartDir := ExtractFilePath(ParamStr(0));
       end; // если папка не существует, возвращаемся к папке exe
-      ShowVer := Cmd.BoolKey['V'];
+      ShowVersion := Cmd.BoolKey['V']; //флаг версии
+      IncludeRecommended := Cmd.BoolKey['R']; //Флаг рекомендованных модов
+      ShowHelp := Cmd.BoolKey['H']; //показать помощь
     end
-    else
-    begin
-      WriteLn('Usage: ', ExtractFileName(ParamStr(0)), ' [-V] [-P="path to folder"]');
-    end;
   finally
     Cmd.Free;
     GetStartDir := IncludeTrailingPathDelimiter(GetStartDir); // добавляем разделитель в конец пути
   end;
-
   writeln();
-  if ShowVer then
+  if ShowHelp then
   begin
-    Msg('F A C T O R I O   M O D   U P D A T E R   V E R S I O N   ' + VersionStr, $0B);  // голубой
+    Msg('FACTORIO MOD UPDATER v' + Version, $0E);
+    WriteLn;
+    Msg('Usage:', $0F);
+    WriteLn('  ', GetExeName, ' [options]');
+    WriteLn;
+    Msg('Options:', $0F);
+    Msg('  /P=<path>', $0B);
+    WriteLn('    Path to the Factorio mods folder.');
+    WriteLn('    Default: folder where ', GetExeName, ' is located.');
+    Msg('  /R', $0B);
+    WriteLn('    Download recommended mods (marked with ? in dependencies).');
+    Msg('  /V', $0B);
+    WriteLn('    Display program version.');
+    Msg('  /H', $0B);
+    WriteLn('    Display this help and exit.');
+    WriteLn;
+    Msg('Examples:', $0F);
+    WriteLn('  ', GetExeName);
+    WriteLn('  ', GetExeName, ' /P="C:\Games\Factorio\mods"');
+    WriteLn('  ', GetExeName, ' /P="C:\Games\Factorio\mods" /R');
+    WriteLn;
+    WriteLn('Press Enter to exit...');
+    ReadLn;
+    Exit;
+  end;
+  if ShowVersion then 
+  begin
+    Msg('F A C T O R I O   M O D   U P D A T E R   V E R S I O N   ' + Version, $0B);  // голубой
   end
   else
   begin
@@ -797,15 +825,28 @@ begin
               for j := 0 to DepNode.Count - 1 do
               begin
                 fDepName := Trim(DepNode.Child(j).Value);
-                if fDepName = '' then
+                fDepName := Trim(DepNode.Child(j).Value);
+                if (Length(fDepName) > 1) and (fDepName[1] = '?') then
                 begin
-                  Continue;
+                  if not IncludeRecommended then
+                  begin
+                    Continue;
+                  end;
+                  fDepName := Trim(Copy(fDepName, 2, Length(fDepName)));
+                end
+                else if Pos('(?)', fDepName) = 1 then
+                begin
+                  if not IncludeRecommended then
+                  begin
+                    Continue;
+                  end;
+                  fDepName := Trim(Copy(fDepName, 4, Length(fDepName)));
                 end;
                 fDepName := ExtractModNameFromDependency(fDepName);
                 if fDepName = '' then
                 begin
                   Continue;
-                end;
+                end; 
 
                 // Проверка на игнорируемые моды
                 IsIgnored := False;
