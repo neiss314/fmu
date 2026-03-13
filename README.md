@@ -63,7 +63,7 @@ The program uses coloured console output to clearly show what is happening:
   - /R - download recommended mods (marked with ? in dependencies).
   - /V' - display program version.
   - /H' - help. 
-   Examples:
+- Examples:
   -  fmu.exe
   -  fmu.exe /P="C:\Games\Factorio\mods"
   -  fmu.exe /P="C:\Games\Factorio\mods" /R  
