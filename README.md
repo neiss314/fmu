@@ -59,14 +59,14 @@ The program uses coloured console output to clearly show what is happening:
 4. After completion, press **Enter** to close the program.
 
 ## Parameters
-   /P=<path> - path to the Factorio mods folder. ( Default: folder where fmu.exe is located.
-   /R - download recommended mods (marked with ? in dependencies).
-   /V' - display program version.
-   /H' - help. 
+  - /P=<path> - path to the Factorio mods folder. ( Default: folder where fmu.exe is located.
+  - /R - download recommended mods (marked with ? in dependencies).
+  - /V' - display program version.
+  - /H' - help. 
    Examples:
-    fmu.exe
-    fmu.exe /P="C:\Games\Factorio\mods"
-    fmu.exe /P="C:\Games\Factorio\mods" /R  
+  -  fmu.exe
+  -  fmu.exe /P="C:\Games\Factorio\mods"
+  -  fmu.exe /P="C:\Games\Factorio\mods" /R  
     
 ---
 
