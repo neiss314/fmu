@@ -490,13 +490,16 @@ type
     if FoundOpPos <= Length(s) then
     begin
       s := Trim(Copy(s, 1, FoundOpPos - 1));
-    end;
-
+    end
     // Отсекаем пробел и последующую часть (если оператор не найден, но есть пробел)
-    p := Pos(' ', s);
-    if p > 0 then
+    else
     begin
-      s := Trim(Copy(s, 1, p - 1));
+      // Оператор не найден — отсекаем по пробелу
+      p := Pos(' ', s);
+      if p > 0 then
+      begin
+        s := Trim(Copy(s, 1, p - 1));
+      end;
     end;
 
     s := Trim(s);
