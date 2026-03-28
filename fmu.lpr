@@ -406,70 +406,44 @@ type
   // Извлекает имя мода из строки зависимости (пример: "? base >= 1.0" -> "base")
   // Удаляет кавычки, игнорирует необязательные/противоречивые префиксы, отсекает операторы сравнения.
   function ExtractModNameFromDependency(const fDepStr: String): String;
-  var
-    s: string = '';
-    p, opPos, i: Integer;
-    FirstNonSpace: Integer;
-    PrefixChar: Char;
-    FoundOpPos: Integer;
   const
     Operators: array[0..5] of String = ('>=', '>', '<=', '<', '=', '~');
+  var
+    s: string;
+    p, i, FoundOpPos: Integer;
   begin
     Result := '';
-    // Удаляем двойные кавычки (если есть)
-    for PrefixChar in fDepStr do
-    begin
-      if PrefixChar <> '"' then
-      begin
-        s := s + PrefixChar;
-      end;
-    end;
-    s := Trim(s);
+
+    // Удаляем двойные кавычки (если есть) и обрезаем пробелы
+    s := Trim(StringReplace(fDepStr, '"', '', [rfReplaceAll]));
     if s = '' then
     begin
       Exit;
     end;
 
-    // Пропускаем начальные пробелы (уже Trim сделал, но оставим для совместимости)
-    FirstNonSpace := 1;
-    while (FirstNonSpace <= Length(s)) and (s[FirstNonSpace] = ' ') do
-    begin
-      Inc(FirstNonSpace);
-    end;
-    if FirstNonSpace > Length(s) then
-    begin
-      Exit;
-    end;
-
-    // Проверяем первый значимый символ на наличие специальных префиксов: ? ! ~ ( — такие зависимости игнорируем
-    PrefixChar := s[FirstNonSpace];
-    if PrefixChar in ['?', '!', '~', '('] then
+    // Проверяем первый символ на специальные префиксы: ? ! ~ ( — такие зависимости игнорируем
+    if s[1] in ['?', '!', '~', '('] then
     begin
       Exit;
     end;
 
     // Обработка скобок в начале: "(something) modname"
-    if (Length(s) >= 3) and (s[FirstNonSpace] = '(') then
+    if (Length(s) >= 3) and (s[1] = '(') then
     begin
       p := Pos(') ', s);
       if p > 0 then
       begin
-        s := Trim(Copy(s, p + 2, Length(s)));
+        s := Trim(Copy(s, p + 2, MaxInt));
       end
       else
       begin
         p := Pos(')', s);
         if p > 0 then
         begin
-          s := Trim(Copy(s, p + 1, Length(s)));
+          s := Trim(Copy(s, p + 1, MaxInt));
         end;
       end;
-      s := Trim(s);
-      if s = '' then
-      begin
-        Exit;
-      end;
-      if s[1] in ['?', '!', '~'] then
+      if (s = '') or (s[1] in ['?', '!', '~']) then
       begin
         Exit;
       end;
@@ -477,24 +451,22 @@ type
 
     // Ищем позицию первого оператора сравнения (>=, >, <=, <, =, ~)
     FoundOpPos := Length(s) + 1;
-    for i := 0 to 5 do
+    for i := 0 to High(Operators) do
     begin
-      opPos := Pos(Operators[i], s);
-      if (opPos > 0) and (opPos < FoundOpPos) then
+      p := Pos(Operators[i], s);
+      if (p > 0) and (p < FoundOpPos) then
       begin
-        FoundOpPos := opPos;
+        FoundOpPos := p;
       end;
     end;
 
-    // Если нашли оператор, отсекаем всё после него
+    // Отсекаем всё после оператора или после пробела, если оператор не найден
     if FoundOpPos <= Length(s) then
     begin
       s := Trim(Copy(s, 1, FoundOpPos - 1));
     end
-    // Отсекаем пробел и последующую часть (если оператор не найден, но есть пробел)
     else
     begin
-      // Оператор не найден — отсекаем по пробелу
       p := Pos(' ', s);
       if p > 0 then
       begin
@@ -502,12 +474,11 @@ type
       end;
     end;
 
-    s := Trim(s);
     if s <> '' then
     begin
       Result := s;
     end;
-  end;
+  end;                             
 
   // Процедура загрузки недостающего мода (зависимости) и добавления его в список.
   // Рекурсивно добавляет собственные зависимости этого мода в список fDependencies.
@@ -822,21 +793,17 @@ begin
               begin
                 fDepName := Trim(DepNode.Child(j).Value);
                 fDepName := Trim(DepNode.Child(j).Value);
-                if (Length(fDepName) > 1) and (fDepName[1] = '?') then
+                if IncludeRecommended then
                 begin
-                  if not IncludeRecommended then
+                  fDepName := Trim(StringReplace(fDepName, '"', '', [rfReplaceAll]));
+                  if Copy(fDepName, 1, 3) = '(?)' then
                   begin
-                    Continue;
-                  end;
-                  fDepName := Trim(Copy(fDepName, 2, Length(fDepName)));
-                end
-                else if Pos('(?)', fDepName) = 1 then
-                begin
-                  if not IncludeRecommended then
+                    fDepName := Trim(Copy(fDepName, 4, MaxInt));
+                  end
+                  else if (fDepName <> '') and (fDepName[1] = '?') then
                   begin
-                    Continue;
+                    fDepName := Trim(Copy(fDepName, 2, MaxInt));
                   end;
-                  fDepName := Trim(Copy(fDepName, 4, Length(fDepName)));
                 end;
                 fDepName := ExtractModNameFromDependency(fDepName);
                 if fDepName = '' then
