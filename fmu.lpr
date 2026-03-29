@@ -16,7 +16,7 @@ uses
   WinInet;
 
 const
-  JSONInfoFull = 'https://mods.factorio.com/api/mods/';
+  JSONInfoFull = '';
   // Базовые URL для получения информации о модах и скачивания файлов
   ModDownloadURL = 'https://mods-storage.re146.dev/';
   // Зеркало для скачивания (добавлено в релизных exe)
