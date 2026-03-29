@@ -16,18 +16,26 @@ uses
   WinInet;
 
 const
-  JSONInfoFull = 'https://mods.factorio.com/api/mods/';  // Базовые URL для получения информации о модах и скачивания файлов
-  ModDownloadURL = '';  // Зеркало для скачивания (добавлено в релизных exe)
-  IgnoredMods: array[0..1] of string = ('base', 'space-age');  // Список модов, которые игнорируются при обработке зависимостей (встроенные моды Factorio)
-  Version = '1.0.1';  // Версия программы
+  JSONInfoFull = 'https://mods.factorio.com/api/mods/';
+  // Базовые URL для получения информации о модах и скачивания файлов
+  ModDownloadURL = 'https://mods-storage.re146.dev/';
+  // Зеркало для скачивания (добавлено в релизных exe)
+  IgnoredMods: array[0..2] of string = ('base', 'space-age', 'quality');
+  // Список модов, которые игнорируются при обработке зависимостей (встроенные моды Factorio)
+  // Версия программы
+  Version = '1.0.1';
 
-  BUFFER_SIZE = 65535;  // Размер буфера для чтения данных (используется при работе с файлами и сетью)
-  strUserAgentDefault = 'Mozilla/5.0 (Windows; U; MSIE 7.0; Windows NT 6.0; en-US)';  // User-Agent для HTTP-запросов (имитация браузера)
-  dwFlags = INTERNET_FLAG_RELOAD or INTERNET_FLAG_NO_CACHE_WRITE;  // Флаги для WinInet: не использовать кэш, всегда загружать заново
+  // Размер буфера для чтения данных (используется при работе с файлами и сетью)
+  BUFFER_SIZE = 65535;
+  // User-Agent для HTTP-запросов (имитация браузера)
+  strUserAgentDefault = 'Mozilla/5.0 (Windows; U; MSIE 7.0; Windows NT 6.0; en-US)';
+  // Флаги для WinInet: не использовать кэш, всегда загружать заново
+  dwFlags = INTERNET_FLAG_RELOAD or INTERNET_FLAG_NO_CACHE_WRITE;
 
 var
   GlobalInetSession: HINTERNET = nil; // Глобальный сеанс WinInet (открывается один раз)
-  GetStartDir: string;  // Рабочая папка, в которой ищем моды (передаётся через параметр -P)
+  GetStartDir: string;
+  // Рабочая папка, в которой ищем моды (передаётся через параметр -P)
 
 type
   // Указатель на запись TModInfo
@@ -478,7 +486,57 @@ type
     begin
       Result := s;
     end;
-  end;                             
+  end;
+
+  // Получаем название мода из его URL
+  function ExtractModNameFromURL(const URL: string): string;
+  var
+    s: string;
+    p: Integer;
+  begin
+    Result := '';
+
+    s := Trim(URL);
+    if s = '' then
+    begin
+      Exit;
+    end;
+
+    // Проверка: должен содержать /mod/
+    p := Pos('/mod/', LowerCase(s));
+    if p = 0 then
+    begin
+      Exit;
+    end;
+
+    // Убираем параметры (?...)
+    p := Pos('?', s);
+    if p > 0 then
+    begin
+      s := Copy(s, 1, p - 1);
+    end;
+
+    // Убираем завершающий слэш
+    while (s <> '') and (s[Length(s)] = '/') do
+    begin
+      Delete(s, Length(s), 1);
+    end;
+
+    // Берём часть после последнего '/'
+    p := LastDelimiter('/', s);
+    if p = 0 then
+    begin
+      Exit;
+    end;
+
+    Result := Copy(s, p + 1, MaxInt);
+
+    // Финальная проверка: имя не должно быть пустым
+    if Result = '' then
+    begin
+      Exit;
+    end;
+  end;
 
   // Процедура загрузки недостающего мода (зависимости) и добавления его в список.
   // Рекурсивно добавляет собственные зависимости этого мода в список fDependencies.
@@ -665,6 +723,7 @@ var
   Cmd: TCmdLine;
   ShowVersion, ShowHelp, IncludeRecommended: Boolean;
   // флаг вывода версии, помощи, скачивания рекомендованных модов
+  ModFromURL: string = ''; // хранение адреса для скачивания мода
 
 begin
   GetStartDir := ExtractFilePath(ParamStr(0)); // по умолчанию папка с exe
@@ -672,10 +731,11 @@ begin
   // --- Начало программы: разбор параметров командной строки ---
   Cmd := TCmdLine.Create;
   try
-    Cmd.AddStrKey('P', '', 'PATH');        // ключ -P для указания папки с модами
+    Cmd.AddStrKey('P', '', 'path');        // ключ -P для указания папки с модами
+    Cmd.AddStrKey('D', '', 'download');
     Cmd.AddBoolKey('V', False, 'version'); // ключ -V для вывода версии
-    Cmd.AddBoolKey('R', False, 'RECOMMEND');
-    Cmd.AddBoolKey('H', False, 'HELP');
+    Cmd.AddBoolKey('R', False, 'recommend');
+    Cmd.AddBoolKey('H', False, 'help');
     //Cmd.RequirePaths(0, 1);
     Cmd.Parse;
     // fmu.exe -p="some path"
@@ -687,6 +747,8 @@ begin
       begin
         GetStartDir := ExtractFilePath(ParamStr(0));
       end; // если папка не существует, возвращаемся к папке exe
+      ModFromURL := ExtractModNameFromURL(Cmd.StrKey['D']);
+
       ShowVersion := Cmd.BoolKey['V']; //флаг версии
       IncludeRecommended := Cmd.BoolKey['R']; //Флаг рекомендованных модов
       ShowHelp := Cmd.BoolKey['H']; //показать помощь
@@ -707,6 +769,8 @@ begin
     Msg('  /P=<path>', $0B);
     WriteLn('    Path to the Factorio mods folder.');
     WriteLn('    Default: folder where ', GetExeName, ' is located.');
+    Msg('  /D=<URL>', $0B);
+    WriteLn('    Mod URL from mods.factorio.com. (Example: https://mods.factorio.com/mod/mod-name?from=updated)');
     Msg('  /R', $0B);
     WriteLn('    Download recommended mods (marked with ? in dependencies).');
     Msg('  /V', $0B);
@@ -748,6 +812,25 @@ begin
   ModInfo := TList.Create;          // список всех обработанных модов (PModInfo)
   ModList := TStringList.Create;    // список имён ZIP-файлов
   AllDependencies := TStringList.Create; // список имён недостающих зависимостей
+// Тестирование, исправить визуал
+  if ModFromURL <> '' then
+  begin
+    Found := False;
+    for i := 0 to ModInfo.Count - 1 do
+    begin
+      if PModInfo(ModInfo[i])^.ModName = ModFromURL then
+      begin
+        Found := True;
+        Break;
+      end;
+    end;
+
+    if not Found then
+    begin
+      // Скачиваем как "недостающий мод" что бы не сломать логику
+      DownloadMissingMod(ModFromURL, ModInfo, AllDependencies);
+    end;
+  end;
 
   InfoStream := TMemoryStream.Create; // поток для временного хранения info.json и JSON-ответов
   try
@@ -793,6 +876,22 @@ begin
               begin
                 fDepName := Trim(DepNode.Child(j).Value);
                 fDepName := Trim(DepNode.Child(j).Value);
+                //if (Length(fDepName) > 1) and (fDepName[1] = '?') then
+                //begin
+                //  if not IncludeRecommended then
+                //  begin
+                //    Continue;
+                //  end;
+                //  fDepName := Trim(Copy(fDepName, 2, Length(fDepName)));
+                //end
+                //else if Pos('(?)', fDepName) = 2 then
+                //begin
+                //  if not IncludeRecommended then
+                //  begin
+                //    Continue;
+                //  end;
+                //  fDepName := Trim(Copy(fDepName, 4, Length(fDepName)));
+                //end;
                 if IncludeRecommended then
                 begin
                   fDepName := Trim(StringReplace(fDepName, '"', '', [rfReplaceAll]));
