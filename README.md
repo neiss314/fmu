@@ -61,12 +61,14 @@ The program uses coloured console output to clearly show what is happening:
 ## Parameters
   - /P=<path> - path to the Factorio mods folder. ( Default: folder where fmu.exe is located.
   - /R - download recommended mods (marked with ? in dependencies).
+  - /D - download mod from mods.factorio.com.
   - /V' - display program version.
   - /H' - help. 
 - Examples:
   -  fmu.exe
   -  fmu.exe /P="C:\Games\Factorio\mods"
-  -  fmu.exe /P="C:\Games\Factorio\mods" /R  
+  -  fmu.exe /P="C:\Games\Factorio\mods" /R
+  -  fmu.exe /D=https://mods.factorio.com/mod/mod-name?from=updated
     
 ---
 
