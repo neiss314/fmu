@@ -23,7 +23,7 @@ const
   IgnoredMods: array[0..2] of string = ('base', 'space-age', 'quality');
   // Список модов, которые игнорируются при обработке зависимостей (встроенные моды Factorio)
   // Версия программы
-  Version = '1.0.1c';
+  Version = '1.0.1d';
 
   // Размер буфера для чтения данных (используется при работе с файлами и сетью)
   BUFFER_SIZE = 65535;
@@ -556,7 +556,7 @@ type
       WriteLn('Error finding the mods folder');
       exit;
     end;
-    WriteLn('Downloading missing dependency: ', fModName);
+
     URL := JSONInfoFull + UrlEncode(fModName);
 
     mJSONStream := TMemoryStream.Create;
@@ -706,6 +706,7 @@ type
       mJSONStream.Free;
     end;
     Msg('  Successfully installed', $0A);
+    WriteLn('');
   end;
 
 var
@@ -816,6 +817,7 @@ begin
   if ModFromURL <> '' then
   begin
     Found := False;
+    // на будующее,если мы решим добавить в ModInfo какой либо мод, или если будет обработка списков
     for i := 0 to ModInfo.Count - 1 do
     begin
       if PModInfo(ModInfo[i])^.ModName = ModFromURL then
@@ -828,13 +830,14 @@ begin
     if not Found then
     begin
       // Скачиваем как "недостающий мод" что бы не сломать логику
+      WriteLn('Downloading mod: ', ModFromURL);
       DownloadMissingMod(ModFromURL, ModInfo, AllDependencies);
     end;
   end;
 
   InfoStream := TMemoryStream.Create; // поток для временного хранения info.json и JSON-ответов
   try
-    // --- Шаг 1: Поиск всех ZIP-файлов в рабочей папке ---
+    // Шаг 1: Поиск всех ZIP-файлов в рабочей папке
     if FindFirst(ZipPath, faAnyFile, sr) = 0 then
     begin
       repeat
@@ -843,7 +846,7 @@ begin
       FindClose(sr);
     end;
 
-    // --- Шаг 2: Обработка каждого найденного ZIP-файла ---
+    // Шаг 2: Обработка каждого найденного ZIP-файла
     for i := 0 to ModList.Count - 1 do
     begin
       InfoStream.Clear;
@@ -861,6 +864,25 @@ begin
             JSONFile.LoadFromStream(InfoStream);
             fName := JSONFile.Force('name').AsString;       // имя мода
             fVersion := JSONFile.Force('version').AsString; // версия из локального файла
+
+            // !!!Грубый фикс!!! Подумать!!!
+            // Проверяем, не добавлен ли уже этот мод (например, через параметр /D)
+            // Повторная проверка нужна что бы корректно получить все зависимости не ломая логику и не усложняя код
+            Found := False;
+            for k := 0 to ModInfo.Count - 1 do
+            begin
+              if PModInfo(ModInfo[k])^.ModName = fName then
+              begin
+                Found := True;
+                Break;
+              end;
+            end;
+            if Found then
+            begin
+              // Мод уже есть – пропускаем
+              Continue;
+            end;
+
             New(pMod);
             pMod^.ModName := fName;
             pMod^.CurrentVer := fVersion;
@@ -954,7 +976,7 @@ begin
     end;
     WriteLn();
 
-    // --- Шаг 3: Проверка обновлений для каждого установленного мода ---
+    // Шаг 3: Проверка обновлений для каждого установленного мода
     for i := 0 to ModInfo.Count - 1 do
     begin
       pMod := PModInfo(ModInfo[i]);
@@ -1048,7 +1070,7 @@ begin
       end;
     end;
 
-    // --- Шаг 4: Обработка недостающих зависимостей (рекурсивно) ---
+    // Шаг 4: Обработка недостающих зависимостей (рекурсивно)
     if Assigned(AllDependencies) and (AllDependencies.Count > 0) then
     begin
       // Очистка списка: удаляем пустые строки, дубликаты
@@ -1093,10 +1115,11 @@ begin
       begin
         fDepName := AllDependencies[0];
         AllDependencies.Delete(0);
+        WriteLn('Downloading missing dependency: ', fDepName);
         DownloadMissingMod(fDepName, ModInfo, AllDependencies);
       end;
     end;
-
+    // Шаг 5: Чистим всё за собой
   finally
     // Освобождение памяти
     for i := 0 to ModInfo.Count - 1 do
