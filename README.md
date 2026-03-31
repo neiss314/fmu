@@ -53,15 +53,14 @@ The program uses coloured console output to clearly show what is happening:
 
 1. Place **`fmu.exe`** (or the compiled binary) in your **Factorio mods folder** — the directory that contains all `.zip` mod files.
 2. Run the program:
-   - from the command line, or
-   - by double-clicking the executable.
+   - from the command line or by double-clicking the executable.
 3. Watch the console output as FMU checks mods and downloads updates.
 4. After completion, press **Enter** to close the program.
 
 ## Parameters
   - /P=<path> - path to the Factorio mods folder. ( Default: folder where fmu.exe is located.
   - /R - download recommended mods (marked with ? in dependencies).
-  - /D - download mod from mods.factorio.com.
+  - /D=<URL> - download mod from mods.factorio.com.
   - /V' - display program version.
   - /H' - help. 
 - Examples:
