@@ -23,7 +23,7 @@ const
   IgnoredMods: array[0..2] of string = ('base', 'space-age', 'quality');
   // Список модов, которые игнорируются при обработке зависимостей (встроенные моды Factorio)
   // Версия программы
-  Version = '1.0.1d';
+  Version = '1.0.1e';
 
   // Размер буфера для чтения данных (используется при работе с файлами и сетью)
   BUFFER_SIZE = 65535;
@@ -733,10 +733,10 @@ begin
   Cmd := TCmdLine.Create;
   try
     Cmd.AddStrKey('P', '', 'path');        // ключ -P для указания папки с модами
-    Cmd.AddStrKey('D', '', 'download');
+    Cmd.AddStrKey('D', '', 'download');    // ключ -D для скачивания мода по URL
     Cmd.AddBoolKey('V', False, 'version'); // ключ -V для вывода версии
-    Cmd.AddBoolKey('R', False, 'recommend');
-    Cmd.AddBoolKey('H', False, 'help');
+    Cmd.AddBoolKey('R', False, 'recommend'); // ключ -R для скачивания рекомендуемых модов как обязательных
+    Cmd.AddBoolKey('H', False, 'help');      // ключ -H для вывода помощи  
     //Cmd.RequirePaths(0, 1);
     Cmd.Parse;
     // fmu.exe -p="some path"
@@ -771,7 +771,7 @@ begin
     WriteLn('    Path to the Factorio mods folder.');
     WriteLn('    Default: folder where ', GetExeName, ' is located.');
     Msg('  /D=<URL>', $0B);
-    WriteLn('    Mod URL from mods.factorio.com. (Example: https://mods.factorio.com/mod/mod-name?from=updated)');
+    WriteLn('    Mod URL from mods.factorio.com.');
     Msg('  /R', $0B);
     WriteLn('    Download recommended mods (marked with ? in dependencies).');
     Msg('  /V', $0B);
@@ -783,11 +783,12 @@ begin
     WriteLn('  ', GetExeName);
     WriteLn('  ', GetExeName, ' /P="C:\Games\Factorio\mods"');
     WriteLn('  ', GetExeName, ' /P="C:\Games\Factorio\mods" /R');
+    WriteLn('  ', GetExeName, ' /D=https://mods.factorio.com/mod/mod-name?from=updated');
     WriteLn;
     WriteLn('Press Enter to exit...');
     ReadLn;
     Exit;
-  end;
+  end; 
   if ShowVersion then
   begin
     Msg('F A C T O R I O   M O D   U P D A T E R   V E R S I O N   ' + Version, $0B);  // голубой
