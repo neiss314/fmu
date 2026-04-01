@@ -531,14 +531,15 @@ type
     end;
   end;
 
-  function IsModIgnored(const AName: string): Boolean;
+  //Проверям на совпадение названия мода в списке игнорируемых модов
+  function IsModIgnored(const fName: string): Boolean;
   var
-    k: Integer;
+    i: Integer;
   begin
     Result := False;
-    for k := Low(IgnoredMods) to High(IgnoredMods) do
+    for i := Low(IgnoredMods) to High(IgnoredMods) do
     begin
-      if AName = IgnoredMods[k] then
+      if fName = IgnoredMods[i] then
       begin
         Result := True;
         Break;
