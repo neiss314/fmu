@@ -18,12 +18,12 @@ uses
 const
   JSONInfoFull = 'https://mods.factorio.com/api/mods/';
   // Базовые URL для получения информации о модах и скачивания файлов
-  ModDownloadURL = '';
+  ModDownloadURL = 'https://mods-storage.re146.dev/';
   // Зеркало для скачивания (добавлено в релизных exe)
   IgnoredMods: array[0..2] of string = ('base', 'space-age', 'quality');
   // Список модов, которые игнорируются при обработке зависимостей (встроенные моды Factorio)
   // Версия программы
-  Version = '1.0.1e';
+  Version = '1.0.1d';
 
   // Размер буфера для чтения данных (используется при работе с файлами и сетью)
   BUFFER_SIZE = 65535;
@@ -495,46 +495,54 @@ type
     p: Integer;
   begin
     Result := '';
-
     s := Trim(URL);
     if s = '' then
     begin
       Exit;
     end;
-
     // Проверка: должен содержать /mod/
     p := Pos('/mod/', LowerCase(s));
     if p = 0 then
     begin
       Exit;
     end;
-
     // Убираем параметры (?...)
     p := Pos('?', s);
     if p > 0 then
     begin
       s := Copy(s, 1, p - 1);
     end;
-
     // Убираем завершающий слэш
     while (s <> '') and (s[Length(s)] = '/') do
     begin
       Delete(s, Length(s), 1);
     end;
-
     // Берём часть после последнего '/'
     p := LastDelimiter('/', s);
     if p = 0 then
     begin
       Exit;
     end;
-
     Result := Copy(s, p + 1, MaxInt);
-
     // Финальная проверка: имя не должно быть пустым
     if Result = '' then
     begin
       Exit;
+    end;
+  end;
+
+  function IsModIgnored(const AName: string): Boolean;
+  var
+    k: Integer;
+  begin
+    Result := False;
+    for k := Low(IgnoredMods) to High(IgnoredMods) do
+    begin
+      if AName = IgnoredMods[k] then
+      begin
+        Result := True;
+        Break;
+      end;
     end;
   end;
 
@@ -549,7 +557,8 @@ type
     JSONFile, ReleasesNode, LastRelease, DepNode: TJsonNode;
     i, j: Integer;
     fDepName: string;
-    IsIgnored, Found: Boolean;
+    //IsIgnored: Boolean;
+    Found: Boolean;
   begin
     if GetStartDir = '' then
     begin
@@ -630,9 +639,6 @@ type
 
       // Теперь извлекаем info.json из скачанного архива, чтобы найти его зависимости
       mJSONStream.Clear;
-      mJSONStream.Position := 0;
-      mJSONStream.Size := 0;
-
       if UnzipInStream(mJSONStream, DownloadedFile, 'info.json') then
       begin
         mJSONStream.Position := 0;
@@ -656,17 +662,7 @@ type
                 Continue;
               end;
 
-              // Проверяем, не игнорируется ли мод
-              IsIgnored := False;
-              for j := Low(IgnoredMods) to High(IgnoredMods) do
-              begin
-                if fDepName = IgnoredMods[j] then
-                begin
-                  IsIgnored := True;
-                  Break;
-                end;
-              end;
-              if IsIgnored then
+              if IsModIgnored(fDepName) then
               begin
                 Continue;
               end;
@@ -720,7 +716,8 @@ var
   sr: TSearchRec;
   pMod: PModInfo;
   i, j, k: Integer;
-  IsIgnored, Found: Boolean;
+  //IsIgnored: Boolean;
+  Found: Boolean;
   Cmd: TCmdLine;
   ShowVersion, ShowHelp, IncludeRecommended: Boolean;
   // флаг вывода версии, помощи, скачивания рекомендованных модов
@@ -729,14 +726,14 @@ var
 begin
   GetStartDir := ExtractFilePath(ParamStr(0)); // по умолчанию папка с exe
   GetExeName := ExtractFileName(ParamStr(0));
-  // --- Начало программы: разбор параметров командной строки ---
+  // Начало программы: разбор параметров командной строки
   Cmd := TCmdLine.Create;
   try
     Cmd.AddStrKey('P', '', 'path');        // ключ -P для указания папки с модами
     Cmd.AddStrKey('D', '', 'download');    // ключ -D для скачивания мода по URL
     Cmd.AddBoolKey('V', False, 'version'); // ключ -V для вывода версии
     Cmd.AddBoolKey('R', False, 'recommend'); // ключ -R для скачивания рекомендуемых модов как обязательных
-    Cmd.AddBoolKey('H', False, 'help');      // ключ -H для вывода помощи  
+    Cmd.AddBoolKey('H', False, 'help');      // ключ -H для вывода помощи
     //Cmd.RequirePaths(0, 1);
     Cmd.Parse;
     // fmu.exe -p="some path"
@@ -788,7 +785,7 @@ begin
     WriteLn('Press Enter to exit...');
     ReadLn;
     Exit;
-  end; 
+  end;
   if ShowVersion then
   begin
     Msg('F A C T O R I O   M O D   U P D A T E R   V E R S I O N   ' + Version, $0B);  // голубой
@@ -814,6 +811,8 @@ begin
   ModInfo := TList.Create;          // список всех обработанных модов (PModInfo)
   ModList := TStringList.Create;    // список имён ZIP-файлов
   AllDependencies := TStringList.Create; // список имён недостающих зависимостей
+  AllDependencies.Sorted := True;
+  AllDependencies.Duplicates := dupIgnore;
 
   if ModFromURL <> '' then
   begin
@@ -851,9 +850,6 @@ begin
     for i := 0 to ModList.Count - 1 do
     begin
       InfoStream.Clear;
-      InfoStream.Position := 0;
-      InfoStream.Size := 0;
-
       if IsValidZipFile(GetStartDir + ModList[i]) then
       begin
         // Пытаемся извлечь info.json
@@ -898,23 +894,7 @@ begin
               for j := 0 to DepNode.Count - 1 do
               begin
                 fDepName := Trim(DepNode.Child(j).Value);
-                fDepName := Trim(DepNode.Child(j).Value);
-                //if (Length(fDepName) > 1) and (fDepName[1] = '?') then
-                //begin
-                //  if not IncludeRecommended then
-                //  begin
-                //    Continue;
-                //  end;
-                //  fDepName := Trim(Copy(fDepName, 2, Length(fDepName)));
-                //end
-                //else if Pos('(?)', fDepName) = 2 then
-                //begin
-                //  if not IncludeRecommended then
-                //  begin
-                //    Continue;
-                //  end;
-                //  fDepName := Trim(Copy(fDepName, 4, Length(fDepName)));
-                //end;
+
                 if IncludeRecommended then
                 begin
                   fDepName := Trim(StringReplace(fDepName, '"', '', [rfReplaceAll]));
@@ -933,17 +913,7 @@ begin
                   Continue;
                 end;
 
-                // Проверка на игнорируемые моды
-                IsIgnored := False;
-                for k := Low(IgnoredMods) to High(IgnoredMods) do
-                begin
-                  if fDepName = IgnoredMods[k] then
-                  begin
-                    IsIgnored := True;
-                    Break;
-                  end;
-                end;
-                if not IsIgnored then
+                if not IsModIgnored(fDepName) then
                 begin
                   if AllDependencies.IndexOf(fDepName) = -1 then
                   begin
@@ -985,8 +955,6 @@ begin
 
       // Запрашиваем информацию о моде с сервера
       InfoStream.Clear;
-      InfoStream.Position := 0;
-      InfoStream.Size := 0;
       dlURL := JSONInfoFull + UrlEncode(pMod^.ModName);
       if DownloadToStream(dlURL, InfoStream) then
       begin
@@ -1074,23 +1042,6 @@ begin
     // Шаг 4: Обработка недостающих зависимостей (рекурсивно)
     if Assigned(AllDependencies) and (AllDependencies.Count > 0) then
     begin
-      // Очистка списка: удаляем пустые строки, дубликаты
-      for i := AllDependencies.Count - 1 downto 0 do
-      begin
-        AllDependencies[i] := Trim(AllDependencies[i]);
-        if AllDependencies[i] = '' then
-        begin
-          AllDependencies.Delete(i);
-        end;
-      end;
-      AllDependencies.Sort;
-      for i := AllDependencies.Count - 1 downto 1 do
-      begin
-        if AllDependencies[i] = AllDependencies[i - 1] then
-        begin
-          AllDependencies.Delete(i);
-        end;
-      end;
 
       // Удаляем те зависимости, которые уже есть в ModInfo (уже установлены)
       for i := AllDependencies.Count - 1 downto 0 do
