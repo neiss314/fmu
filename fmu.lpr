@@ -20,10 +20,10 @@ const
   // Базовые URL для получения информации о модах и скачивания файлов
   ModDownloadURL = '';
   // Зеркало для скачивания (добавлено в релизных exe)
-  IgnoredMods: array[0..2] of string = ('base', 'space-age', 'quality');
+  IgnoredMods: array[0..4] of string = ('base', 'space-age', 'quality', 'recycler', 'elevated-rails');
   // Список модов, которые игнорируются при обработке зависимостей (встроенные моды Factorio)
   // Версия программы
-  Version = '1.0.1e';
+  Version = '1.0.1f';
 
   // Размер буфера для чтения данных (используется при работе с файлами и сетью)
   BUFFER_SIZE = 65535;
